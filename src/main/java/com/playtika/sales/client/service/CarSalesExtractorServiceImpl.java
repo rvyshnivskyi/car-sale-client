@@ -18,13 +18,11 @@ public class CarSalesExtractorServiceImpl implements CarSalesExtractorService {
     @Override
     public List<CarSaleDto> extractAllCarSales(URL carsCsvFileUrl) throws IOException {
         FileURLConnection httpConn = (FileURLConnection) carsCsvFileUrl.openConnection();
-        String contentType = httpConn.getContentType();
-        log.info("Content type: " + contentType);
-            try(InputStream in = httpConn.getInputStream()) {
-                 return new CsvToBeanBuilder(new InputStreamReader(in))
-                         .withIgnoreLeadingWhiteSpace(true)
-                         .withType(CarSaleDto.class)
-                        .build().parse();
-            }
+        try (InputStream in = httpConn.getInputStream()) {
+            return new CsvToBeanBuilder(new InputStreamReader(in))
+                    .withIgnoreLeadingWhiteSpace(true)
+                    .withType(CarSaleDto.class)
+                    .build().parse();
+        }
     }
 }

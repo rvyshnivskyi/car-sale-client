@@ -6,7 +6,6 @@ import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.playtika.sales.client.domain.dto.CarSaleDto;
 import com.playtika.sales.client.service.CarSalesExtractorService;
 import com.playtika.sales.client.service.external.http.CarServiceClient;
-import com.playtika.sales.client.service.external.http.CarServiceClientImpl;
 import feign.Feign;
 import feign.gson.GsonDecoder;
 import feign.gson.GsonEncoder;
@@ -59,7 +58,7 @@ public class CarServiceClientControllerRestTest {
                 .decoder(new GsonDecoder())
                 .target(CarServiceClient.class, "http://localhost:8091");
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new CarServiceClientController(extractor, new CarServiceClientImpl(feignClient)))
+                .standaloneSetup(new CarServiceClientController(extractor, feignClient))
                 .build();
     }
 

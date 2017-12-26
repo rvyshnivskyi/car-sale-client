@@ -1,24 +1,21 @@
-package com.playtika.sales.client;
+package com.playtika.sales.client.configuration;
 
 import com.playtika.sales.client.service.external.http.CarServiceClient;
-import com.playtika.sales.client.service.external.http.CarServiceClientImpl;
 import feign.Feign;
 import feign.gson.GsonDecoder;
 import feign.gson.GsonEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-@org.springframework.context.annotation.Configuration
-public class Configuration {
-    @Value("${car.service.url}")
-    private String carServiceUrl;
+@Configuration
+public class CarSalesClientConfiguration {
 
     @Bean
-    CarServiceClient carServiceClient() {
-        CarServiceClient feignClient = Feign.builder()
+    public CarServiceClient carServiceClient(@Value("${car.service.url}") String carServiceUrl) {
+        return Feign.builder()
                 .encoder(new GsonEncoder())
                 .decoder(new GsonDecoder())
                 .target(CarServiceClient.class, carServiceUrl);
-        return new CarServiceClientImpl(feignClient);
     }
 }
