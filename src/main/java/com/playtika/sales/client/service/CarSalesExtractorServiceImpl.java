@@ -2,6 +2,7 @@ package com.playtika.sales.client.service;
 
 import com.opencsv.bean.CsvToBeanBuilder;
 import com.playtika.sales.client.domain.dto.CarSaleDto;
+import com.playtika.sales.client.exception.NotPossibleToDownloadFileException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import sun.net.www.protocol.file.FileURLConnection;
@@ -16,13 +17,19 @@ import java.util.List;
 @Slf4j
 public class CarSalesExtractorServiceImpl implements CarSalesExtractorService {
     @Override
-    public List<CarSaleDto> extractAllCarSales(URL carsCsvFileUrl) throws IOException {
-        FileURLConnection httpConn = (FileURLConnection) carsCsvFileUrl.openConnection();
-        try (InputStream in = httpConn.getInputStream()) {
-            return new CsvToBeanBuilder(new InputStreamReader(in))
-                    .withIgnoreLeadingWhiteSpace(true)
-                    .withType(CarSaleDto.class)
-                    .build().parse();
+    public List<CarSaleDto> extractAllCarSales(String carsCsvFileUrl) throws NotPossibleToDownloadFileException {
+        try {
+            FileURLConnection httpConn = (FileURLConnection) new URL(carsCsvFileUrl).openConnection();
+            try (InputStream in = httpConn.getInputStream()) {
+                return new CsvToBeanBuilder(new InputStreamReader(in))
+                        .withIgnoreLeadingWhiteSpace(true)
+                        .withType(CarSaleDto.class)
+                        .build().parse();
+            }
+        } catch (IOException ex) {
+            throw new NotPossibleToDownloadFileException(carsCsvFileUrl, ex);
+        } catch (RuntimeException ex) {
+            throw new NotPossibleToDownloadFileException(carsCsvFileUrl, ex);
         }
     }
 }

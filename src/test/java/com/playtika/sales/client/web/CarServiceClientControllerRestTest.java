@@ -1,72 +1,54 @@
 package com.playtika.sales.client.web;
 
-import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
-import com.github.tomakehurst.wiremock.client.WireMock;
-import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import com.playtika.sales.client.domain.Car;
 import com.playtika.sales.client.domain.dto.CarSaleDto;
+import com.playtika.sales.client.exception.NotPossibleToDownloadFileException;
+import com.playtika.sales.client.exception.feign.CarIsAlreadyExistException;
+import com.playtika.sales.client.exception.feign.CarSalesClientException;
+import com.playtika.sales.client.exception.feign.CarSalesServerException;
 import com.playtika.sales.client.service.CarSalesExtractorService;
 import com.playtika.sales.client.service.external.http.CarServiceClient;
-import feign.Feign;
-import feign.gson.GsonDecoder;
-import feign.gson.GsonEncoder;
 import org.hamcrest.Matchers;
-import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.stubbing.OngoingStubbing;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.IOException;
 import java.net.URL;
 import java.util.List;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.typeCompatibleWith;
 import static org.mockito.Mockito.when;
-import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.CONFLICT;
-import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@ActiveProfiles("test")
-@RunWith(MockitoJUnitRunner.class)
+@WebMvcTest(CarServiceClientController.class)
+@RunWith(SpringRunner.class)
 public class CarServiceClientControllerRestTest {
 
-    MockMvc mockMvc;
-
-    @Mock
+    @MockBean
     CarSalesExtractorService extractor;
 
-    @Rule
-    public WireMockRule wm = new WireMockRule(options().port(8091));
+    @MockBean
+    CarServiceClient client;
 
-    @Before
-    public void setUp() throws Exception {
-        CarServiceClient feignClient = Feign.builder()
-                .encoder(new GsonEncoder())
-                .decoder(new GsonDecoder())
-                .target(CarServiceClient.class, "http://localhost:8091");
-        mockMvc = MockMvcBuilders
-                .standaloneSetup(new CarServiceClientController(extractor, feignClient))
-                .build();
-    }
+    @Autowired
+    MockMvc mockMvc;
 
     @Test
     public void successfulRegistrationCarSales() throws Exception {
         mockExtractorService(asList(generateTestDto("AA3295", "Vyshnivskyi"), generateTestDto("AA3296", "Vyshnivskyi")));
-        generateStubCarSaleService("AA3295", ok("1"));
-        generateStubCarSaleService("AA3296", ok("2"));
+        mockFeignClient("AA3295").thenReturn(1L);
+        mockFeignClient("AA3296").thenReturn(2L);
 
         long result = Long.valueOf(
                 mockMvc.perform(MockMvcRequestBuilders.post("/cars")
@@ -83,8 +65,8 @@ public class CarServiceClientControllerRestTest {
     @Test
     public void unSuccessfulCauseConflictRegistrationPartOfCarSales() throws Exception {
         mockExtractorService(asList(generateTestDto("AA3295", "Vyshnivskyi"), generateTestDto("AA3296", "Vyshnivskyi")));
-        generateStubCarSaleService("AA3295", ok("1"));
-        generateStubCarSaleService("AA3296", aResponse().withStatus(CONFLICT.value()));
+        mockFeignClient("AA3295").thenReturn(1L);
+        mockFeignClient("AA3296").thenThrow(CarIsAlreadyExistException.class);
 
         long result = Long.valueOf(
                 mockMvc.perform(MockMvcRequestBuilders.post("/cars")
@@ -101,8 +83,26 @@ public class CarServiceClientControllerRestTest {
     @Test
     public void unSuccessfulCauseBadRequestRegistrationPartOfCarSales() throws Exception {
         mockExtractorService(asList(generateTestDto("AA3295", "Vyshnivskyi"), generateTestDto("AA3296", "Vyshnivskyi")));
-        generateStubCarSaleService("AA3295", ok("1"));
-        generateStubCarSaleService("AA3296", aResponse().withStatus(BAD_REQUEST.value()));
+        mockFeignClient("AA3295").thenReturn(1L);
+        mockFeignClient("AA3296").thenThrow(CarSalesClientException.class);
+
+        long result = Long.valueOf(
+                mockMvc.perform(MockMvcRequestBuilders.post("/cars")
+                        .contentType("text/plain;charset=UTF-8")
+                        .content(String.valueOf(new URL("http://test.csv"))))
+                        .andExpect(status().isOk())
+                        .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString());
+        assertThat(result, Matchers.is(1L));
+    }
+
+    @Test
+    public void unSuccessfulRegistrationPartOfCarSalesCauseTroublesOnCarSalesServer() throws Exception {
+        mockExtractorService(asList(generateTestDto("AA3295", "Vyshnivskyi"), generateTestDto("AA3296", "Vyshnivskyi")));
+        mockFeignClient("AA3295").thenReturn(1L);
+        mockFeignClient("AA3296").thenThrow(CarSalesServerException.class);
 
         long result = Long.valueOf(
                 mockMvc.perform(MockMvcRequestBuilders.post("/cars")
@@ -118,28 +118,30 @@ public class CarServiceClientControllerRestTest {
 
     @Test
     public void exceptionAppearsWhenCanNotExtractCarSalesFromUrl() throws Exception {
-        when(extractor.extractAllCarSales(new URL("http://test.csv"))).thenThrow(IOException.class);
+        when(extractor.extractAllCarSales("http://test.csv")).thenThrow(NotPossibleToDownloadFileException.class);
         Exception resolved = mockMvc.perform(MockMvcRequestBuilders.post("/cars")
                 .contentType("text/plain;charset=UTF-8")
                 .content(String.valueOf(new URL("http://test.csv"))))
                 .andExpect(status().isNotFound())
                 .andReturn().getResolvedException();
-        assertThat(resolved.getClass(), typeCompatibleWith(CarServiceClientController.NotPossibleToDownloadFileException.class));
+        assertThat(resolved.getClass(), typeCompatibleWith(NotPossibleToDownloadFileException.class));
     }
 
-    void generateStubCarSaleService(String number, ResponseDefinitionBuilder response) {
-        stubFor(WireMock.post("/cars?price=2003.1&firstName=Roma&phone=380960000000&lastName=Vyshnivskyi")
-                .withHeader(CONTENT_TYPE, equalTo(APPLICATION_JSON_VALUE))
-                .withRequestBody(equalToJson(getCarJSON(number)))
-                .willReturn(response));
+    OngoingStubbing<Long> mockFeignClient(String number) {
+        return when(client.addCarWithSaleDetails(2003.1, "Roma", "380960000000", "Vyshnivskyi", generateCar(number)));
     }
 
     void mockExtractorService(List<CarSaleDto> carSales) throws IOException {
-        when(extractor.extractAllCarSales(new URL("http://test.csv"))).thenReturn(carSales);
+        when(extractor.extractAllCarSales("http://test.csv")).thenReturn(carSales);
     }
 
-    String getCarJSON(final String number) {
-        return "{\"brand\":\"BMW\",\"color\":\"red\",\"year\":2001,\"number\":\"" + number + "\"}";
+    Car generateCar(String number) {
+        return Car.builder()
+                .number(number)
+                .year(2001)
+                .color("red")
+                .brand("BMW")
+                .build();
     }
 
     CarSaleDto generateTestDto(String number, String lastName) {
