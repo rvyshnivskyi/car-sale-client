@@ -5,10 +5,9 @@ import lombok.Data;
 
 @Data
 @Builder
-public class Car {
+public class Person {
     private Long id;
-    private String brand;
-    private String color;
-    private int year;
-    private String number;
+    private String firstName;
+    private String phoneNumber;
+    private String lastName;
 }

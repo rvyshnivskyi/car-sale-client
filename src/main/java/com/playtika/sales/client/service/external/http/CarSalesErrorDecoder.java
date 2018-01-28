@@ -3,6 +3,7 @@ package com.playtika.sales.client.service.external.http;
 import com.playtika.sales.client.exception.feign.CarIsAlreadyExistException;
 import com.playtika.sales.client.exception.feign.CarSalesClientException;
 import com.playtika.sales.client.exception.feign.CarSalesServerException;
+import com.playtika.sales.client.exception.feign.CarWithInsertedIdWasNotFoundException;
 import feign.Response;
 import feign.codec.ErrorDecoder;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,9 @@ public class CarSalesErrorDecoder implements ErrorDecoder {
         if (response.status() >= 400 && response.status() <= 499) {
             if (response.status() == HttpStatus.CONFLICT.value()) {
                 return new CarIsAlreadyExistException();
+            }
+            if (response.status() == HttpStatus.NOT_FOUND.value()) {
+                return new CarWithInsertedIdWasNotFoundException();
             }
             return new CarSalesClientException(
                     response.status(),
